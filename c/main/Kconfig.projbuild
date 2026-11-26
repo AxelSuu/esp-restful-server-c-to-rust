@@ -19,4 +19,10 @@ menu "Example Configuration"
         help
             If enabled, the example will deploy web pages to the device's filesystem.
             Ensure that the necessary files (html, css, js, etc.) are available in the `front/web-demo/dist` directory.
+
+    config EXAMPLE_HEAP_STATS
+        bool "Expose heap statistics at /api/v1/heap"
+        default n
+        help
+            Measurement only, for bench/http_bench.py.
 endmenu

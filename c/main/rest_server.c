@@ -9,6 +9,7 @@
 #include "esp_http_server.h"
 #include "esp_chip_info.h"
 #include "esp_random.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_check.h"
 #include "esp_vfs.h"
@@ -162,6 +163,21 @@ static esp_err_t temperature_data_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+#if CONFIG_EXAMPLE_HEAP_STATS
+/* Measurement only: total, current and peak use of the default heap */
+static esp_err_t heap_get_handler(httpd_req_t *req)
+{
+    size_t total = heap_caps_get_total_size(MALLOC_CAP_DEFAULT);
+    char buf[96];
+    snprintf(buf, sizeof(buf), "{\"total\":%u,\"used\":%u,\"peak\":%u}",
+             (unsigned)total,
+             (unsigned)(total - heap_caps_get_free_size(MALLOC_CAP_DEFAULT)),
+             (unsigned)(total - heap_caps_get_minimum_free_size(MALLOC_CAP_DEFAULT)));
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, buf);
+}
+#endif // CONFIG_EXAMPLE_HEAP_STATS
+
 esp_err_t start_rest_server(const char *base_path)
 {
     esp_err_t ret = ESP_OK;
@@ -203,6 +219,16 @@ esp_err_t start_rest_server(const char *base_path)
         .user_ctx = rest_context
     };
     httpd_register_uri_handler(server, &light_brightness_post_uri);
+
+#if CONFIG_EXAMPLE_HEAP_STATS
+    httpd_uri_t heap_get_uri = {
+        .uri = "/api/v1/heap",
+        .method = HTTP_GET,
+        .handler = heap_get_handler,
+        .user_ctx = rest_context
+    };
+    httpd_register_uri_handler(server, &heap_get_uri);
+#endif // CONFIG_EXAMPLE_HEAP_STATS
 
 #if CONFIG_EXAMPLE_DEPLOY_WEB_PAGES
     /* URI handler for getting web server files */

@@ -83,3 +83,5 @@ opt-level     = 's'
 default = ["web"]
 # Embed front/web-demo/dist, CONFIG_EXAMPLE_DEPLOY_WEB_PAGES in the C build.
 web = []
+# GET /api/v1/heap for bench/http_bench.py, EXAMPLE_HEAP_STATS in the C build.
+heap-stats = ["esp-alloc/internal-heap-stats"]

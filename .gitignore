@@ -83,4 +83,4 @@ Desktop.ini
 
 # Rust
 target/
-sdkconfig.wifi
+sdkconfig.local

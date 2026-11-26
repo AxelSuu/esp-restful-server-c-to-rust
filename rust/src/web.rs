@@ -39,7 +39,7 @@ struct Brightness {
 }
 
 pub fn router() -> picoserve::Router<impl PathRouter> {
-    picoserve::Router::from_service(StaticFiles)
+    let app = picoserve::Router::from_service(StaticFiles)
         .route(
             "/api/v1/system/info",
             get(|| async {
@@ -68,7 +68,33 @@ pub fn router() -> picoserve::Router<impl PathRouter> {
                 );
                 "Post control value successfully"
             }),
-        )
+        );
+
+    // Measurement only: off by default so the size numbers stay those of the port.
+    #[cfg(feature = "heap-stats")]
+    let app = app.route(
+        "/api/v1/heap",
+        get(|| async { response::Json(heap_stats()) }),
+    );
+    app
+}
+
+#[cfg(feature = "heap-stats")]
+#[derive(Serialize)]
+struct HeapStats {
+    total: usize,
+    used: usize,
+    peak: usize,
+}
+
+#[cfg(feature = "heap-stats")]
+fn heap_stats() -> HeapStats {
+    let s = esp_alloc::HEAP.stats();
+    HeapStats {
+        total: s.size,
+        used: s.current_usage,
+        peak: s.max_usage,
+    }
 }
 
 /// Serves the embedded frontend; the C build reads the same files from LittleFS.
