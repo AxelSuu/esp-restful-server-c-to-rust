@@ -236,7 +236,7 @@ def main():
             "ram": ram(str(C_BUILD / "restful_server.elf")),
             "source": tokei([ROOT / "c/main"]),
             "packages": len(proj["build_components"]),
-            "toolchain": proj.get("c_compiler", ""),
+            "toolchain": run(proj["c_compiler"], "--version").splitlines()[0],
         },
         "rust": {
             "image": images["rust"],
@@ -245,7 +245,8 @@ def main():
             "origin": r_cat,
             "origin_detail": r_crate,
             "ram": rust_ram,
-            "source": tokei([ROOT / "rust/src", ROOT / "rust/build.rs"]),
+            "source": tokei([ROOT / "rust/src"]),
+            "build_script": tokei([ROOT / "rust/build.rs"]).get("Rust", 0),
             "packages": len(crates),
             "unsafe": int(run("sh", "-c", f"grep -rw unsafe {ROOT}/rust/src | wc -l")),
             "toolchain": run("rustc", "--version", cwd=ROOT / "rust").strip(),
