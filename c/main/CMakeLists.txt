@@ -4,7 +4,7 @@ idf_component_register(SRCS "esp_rest_main.c"
                        INCLUDE_DIRS ".")
 
 if(CONFIG_EXAMPLE_DEPLOY_WEB_PAGES)
-    set(WEB_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../front/web-demo")
+    set(WEB_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../front/web-demo")
     if(EXISTS ${WEB_SRC_DIR}/dist)
         littlefs_create_partition_image(www ${WEB_SRC_DIR}/dist FLASH_IN_PROJECT)
     else()
