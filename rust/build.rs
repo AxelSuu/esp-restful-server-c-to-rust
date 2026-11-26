@@ -4,6 +4,13 @@ fn main() {
     linker_be_nice();
     // make sure linkall.x is the last linker script (otherwise might cause problems with flip-link)
     println!("cargo:rustc-link-arg=-Tlinkall.x");
+    // Linker map next to the ELF, for bench/measure_static.py.
+    let out = env::var("OUT_DIR").unwrap();
+    let profile_dir = Path::new(&out).ancestors().nth(3).unwrap();
+    println!(
+        "cargo:rustc-link-arg=-Map={}",
+        profile_dir.join("restful_server.map").display()
+    );
 
     println!("cargo:rerun-if-env-changed=WIFI_SSID");
     println!("cargo:rerun-if-env-changed=WIFI_PASSWORD");
