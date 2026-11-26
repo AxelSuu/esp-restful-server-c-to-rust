@@ -2,3 +2,7 @@ CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_example.csv"
 CONFIG_PARTITION_TABLE_FILENAME="partitions_example.csv"
+
+# Comparison build: serve the frontend, optimise for size (Rust uses opt-level "s")
+CONFIG_EXAMPLE_DEPLOY_WEB_PAGES=y
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
