@@ -5,9 +5,8 @@ Espressifs
 ported from C (ESP-IDF 6.0) to Rust (esp-hal 1.2.3,
 Embassy, picoserve), measured on an ESP32-C6. Full tables: [results/README.md](results/README.md).
 
-| | C / ESP-IDF | Rust / esp-hal |
+| ESP32-C6, same frontend and API | C: ESP-IDF 6.0, FreeRTOS, lwIP | Rust: esp-hal 1.2, Embassy, smoltcp |
 |---|---:|---:|
-| Parity checks passed, as shipped | 6 / 8 | 8 / 8 |
 | App image, frontend excluded | 934 KiB | 662 KiB |
 | SRAM in use at peak | 254 KiB | 242 KiB |
 | Small request, p50 | 19 ms | 13 ms |
@@ -23,15 +22,15 @@ Embassy, picoserve), measured on an ESP32-C6. Full tables: [results/README.md](r
 ![Latency](results/figures/latency.svg)
 ![Boot](results/figures/boot.svg)
 
-## Caveats
+## Notes
 
-- **C fails 2 of 8 checks as shipped.** Bad JSON crashes it (NULL dereference, reboot), and it
+- C fails 2 of 8 checks as shipped. Bad JSON crashes it (NULL dereference, reboot), and it
   stops reconnecting after 7 attempts, so a router reboot leaves it offline. The second is
   fixed here with `CONFIG_EXAMPLE_WIFI_CONN_MAX_RETRY`.
-- **Rust has no listen backlog.** Each task owns one socket, so extra connections are refused.
+- Rust has no listen backlog. Each task owns one socket, so extra connections are refused.
   It runs 8 tasks to cover a browser's 6.
-- **Rust is slow on large files.** Its TCP send buffer is 4 KiB; 8 KiB gives 578 ms.
-- **Rust runs Wi-Fi without power save.** That is esp-radio's default; IDF uses modem sleep. With
+- Rust is slow on large files. Its TCP send buffer is 4 KiB; 8 KiB gives 578 ms.
+- Rust runs Wi-Fi without power save. That is esp-radio's default; IDF uses modem sleep. With
   modem sleep, Rust page loads failed in one run.
 
 ## Run
