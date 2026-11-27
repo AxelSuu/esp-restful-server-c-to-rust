@@ -52,12 +52,14 @@ python3 bench/measure_static.py       # size by origin, static RAM, source, pack
 bench/build_times.sh                  # hyperfine, clean and one-file change
 bench/http_bench.py check   --host <ip> --build c       # parity checklist
 bench/http_bench.py latency --host <ip> --build c -n 1000
-bench/http_bench.py watch   --host <ip> --build c       # reboot the AP during this
+bench/http_bench.py watch   --host <ip> --build c       # reboot the AP during this (300 s)
+bench/http_bench.py boot    --host <ip> --build c       # 10 USB resets; needs pyserial
+bench/serial_log.py --out results/x.log                 # serial log, Wi-Fi name redacted
 uv run bench/charts.py                # results/figures/*.svg
 ```
 
 `measure_static.py` needs the Rust build without the frontend as well:
-`cargo build --release --no-default-features --target-dir target/noweb` in `rust/`.
+`scripts/build_rust.sh --no-default-features --target-dir target/noweb`.
 
 For heap numbers, flash builds with the opt-in `/api/v1/heap` endpoint:
 `HEAP_STATS=1 scripts/build_c.sh flash` and `scripts/build_rust.sh --features heap-stats`.
