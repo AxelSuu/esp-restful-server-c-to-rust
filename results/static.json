@@ -1,6 +1,6 @@
 {
   "c": {
-    "image": 956496,
+    "image": 956384,
     "web_storage": "LittleFS partition, 2 MiB",
     "origin": {
       "Wi-Fi, PHY, crypto": 518792,
@@ -8,8 +8,8 @@
       "OS, HAL, runtime": 135798,
       "HTTP, JSON, mDNS": 66083,
       "Storage": 52685,
-      "App": 5502,
-      "Unattributed": 78543
+      "App": 5442,
+      "Unattributed": 78491
     },
     "origin_detail": {
       "net80211": 179905,
@@ -41,7 +41,7 @@
       "esp_event": 3599,
       "esp_mm": 3297,
       "heap": 3231,
-      "protocol_examples_common": 3175,
+      "protocol_examples_common": 3115,
       "esp_driver_uart": 3023,
       "esp_phy": 2900,
       "esp_timer": 2891,
@@ -78,7 +78,7 @@
       "esp_eth": 4,
       "espnow": 3,
       "nvs_sec_provider": 2,
-      "merged string literals": 76032
+      "merged string literals": 75972
     },
     "ram": {
       "bss": 23922,
@@ -94,36 +94,36 @@
     "toolchain": "riscv32-esp-elf-gcc (crosstool-NG esp-15.2.0_20251204) 15.2.0"
   },
   "rust": {
-    "image": 1685152,
-    "image_noweb": 736864,
+    "image": 1626064,
+    "image_noweb": 677776,
     "web_storage": "embedded in app image",
     "origin": {
-      "Unattributed": 82885,
-      "Wi-Fi, PHY, crypto": 441825,
-      "TCP/IP": 85740,
-      "OS, HAL, runtime": 64634,
-      "HTTP, JSON, mDNS": 31062,
-      "App": 30718
+      "Unattributed": 77773,
+      "Wi-Fi, PHY, crypto": 440367,
+      "TCP/IP": 23332,
+      "App": 44472,
+      "OS, HAL, runtime": 60762,
+      "HTTP, JSON, mDNS": 31070
     },
     "origin_detail": {
-      "unattributed constants": 80498,
+      "unattributed constants": 75406,
       "libnet80211.a": 216657,
       "libpp.a": 114239,
       "libphy.a": 29825,
       "libespnow.a": 3,
-      "smoltcp": 76922,
+      "smoltcp": 19496,
+      "restful_server": 44472,
       "embassy_sync": 3314,
       "esp_hal": 9212,
-      "riscv_pac": 432,
-      "esp_radio": 21762,
+      "riscv_pac": 390,
+      "esp_radio": 20304,
       "domain": 5574,
       "edge_mdns": 7766,
-      "restful_server": 30718,
-      "picoserve": 14108,
-      "core": 24118,
+      "picoserve": 14116,
+      "core": 22190,
       "futures_util": 12390,
-      "edge_nal_embassy": 1914,
-      "embassy_executor": 162,
+      "edge_nal_embassy": 1618,
+      "embassy_executor": 194,
       "esp_phy": 128,
       "log": 490,
       "libwpa_supplicant.a": 50464,
@@ -132,8 +132,7 @@
       "libcore.a": 353,
       "libmesh.a": 60,
       "esp_rtos": 4340,
-      "embassy_net": 6498,
-      "embassy_net_driver": 406,
+      "embassy_net": 2218,
       "embassy_time": 192,
       "embedded_io": 114,
       "esp_sync": 2752,
@@ -147,22 +146,22 @@
       "linked_list_allocator": 502,
       "serde_json_core": 3218,
       "octseq": 396,
-      "heapless": 2464,
-      "section padding": 2287
+      "heapless": 530,
+      "section padding": 2263
     },
     "ram": {
       "IRAM code": 63088,
-      "data": 8956,
-      "bss": 23004,
-      "unused (main stack)": 276944,
+      "data": 8796,
+      "bss": 22436,
+      "unused (main stack)": 242544,
       "heap arena": 102500,
-      "task futures": 43152
+      "task futures": 78280
     },
     "source": {
-      "Rust": 319
+      "Rust": 323
     },
     "build_script": 138,
-    "packages": 174,
+    "packages": 173,
     "unsafe": 0,
     "toolchain": "rustc 1.99.0 (b940084d7 2026-09-28)"
   },
