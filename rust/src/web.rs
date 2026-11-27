@@ -15,8 +15,9 @@ use serde::{Deserialize, Serialize};
 
 include!(concat!(env!("OUT_DIR"), "/assets.rs"));
 
-/// Concurrent HTTP connections; the C server allows 7 sockets but serves them from one task.
-pub const WEB_TASKS: usize = 4;
+/// Concurrent HTTP connections. smoltcp has no listen backlog, so a connection beyond this is
+/// refused; browsers open 6 at once. The C server has 7 sockets plus lwIP's backlog.
+pub const WEB_TASKS: usize = 8;
 
 #[derive(Serialize)]
 struct SystemInfo {

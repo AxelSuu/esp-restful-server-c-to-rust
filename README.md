@@ -72,14 +72,15 @@ random port never arrived in testing (probably the Hyper-V firewall). No firewal
 
 | | C | Rust |
 |---|---|---|
-| POST with invalid JSON | `cJSON_Parse` returns NULL and the handler dereferences it: expect a crash and reboot (to confirm on hardware) | 400 Bad Request |
+| POST with invalid JSON | `cJSON_Parse` returns NULL and the handler dereferences it (`rest_server.c:126`): Load access fault, reboot, serving again after ~5.6 s | 400 Bad Request |
 | Colour value above 255 | accepted (`valueint`) | 400, fields are `u8` |
 | Unknown file | 500 | 404 |
 | JSON formatting | pretty-printed (`cJSON_Print`) | compact |
 | `idf_version` field | IDF version | `esp-hal v1.2.3` (key kept for the frontend) |
 | NetBIOS name | yes | no |
 | Wi-Fi security | up to WPA3 | up to WPA2: esp-radio beta.1 has no WPA3 station mode |
-| Concurrent HTTP connections | 7 sockets, one server task | 4 sockets, one task each |
+| Concurrent HTTP connections | 7 sockets, one server task, lwIP accept backlog | 8 sockets, one task each, no backlog: more connections are refused |
+| Client closes before the server's FIN | no visible effect | the socket stays busy ~1 s (a retransmit), so bursts of such clients get refused; the bench waits for the server's FIN |
 
 ## Results
 
