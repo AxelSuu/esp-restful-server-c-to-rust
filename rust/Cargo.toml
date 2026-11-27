@@ -22,7 +22,7 @@ esp-rtos = { version = "0.4.0", features = [
 esp-bootloader-esp-idf = { version = "0.6.0", features = ["esp32c6", "log-04"] }
 log                    = "0.4.27"
 
-embassy-net = { version = "0.9.1", features = ["dhcpv4", "log", "medium-ethernet", "multicast", "tcp", "udp"] }
+embassy-net = { version = "0.9.1", features = ["dhcpv4", "dhcpv4-hostname", "log", "medium-ethernet", "multicast", "tcp", "udp"] }
 embedded-io = "0.7.1"
 embedded-io-async = "0.7.0"
 esp-alloc = { version = "0.11.0", features = ["esp32c6"] }
@@ -42,26 +42,18 @@ esp-radio = { version = "1.0.0-beta.1", features = [
   "unstable",
   "wifi",
 ] }
-smoltcp = { version = "0.14.0", default-features = false, features = [
-  "log",
-  "medium-ethernet",
-  "multicast",
-  "proto-dhcpv4",
-  "proto-dns",
-  "proto-ipv4",
-  "socket-dns",
-  "socket-icmp",
-  "socket-raw",
-  "socket-tcp",
-  "socket-udp",
-] }
 
 critical-section = "1.2.0"
 static_cell      = "2.1.1"
 picoserve = { version = "0.21", features = ["embassy", "json", "log"] }
 serde = { version = "1", default-features = false, features = ["derive"] }
 edge-mdns = { version = "0.8", default-features = false, features = ["io"] }
-edge-nal-embassy = "0.9"
+# Default "all" adds embassy-net DNS (an extra socket), ICMP and IPv6; mDNS needs none of them.
+edge-nal-embassy = { version = "0.9", default-features = false, features = [
+  "multicast",
+  "proto-ipv4",
+  "udp",
+] }
 edge-nal = "0.7"
 embassy-futures = "0.1.2"
 embassy-sync = "0.8"
