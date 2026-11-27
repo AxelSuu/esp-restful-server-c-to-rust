@@ -188,6 +188,49 @@ def latency(runs):
                          "frontend files over six parallel connections.")
 
 
+def static_in_use(ram):
+    return sum(v for k, v in ram.items() if k not in ("heap arena", "unused (main stack)"))
+
+
+def ram_runtime(s, runs):
+    """SRAM in use at the heap's peak: static sections plus the heap high-water mark."""
+    labels = ["Static: IRAM code, .data, .bss, task futures", "Heap high-water mark",
+              "SRAM in use at peak"]
+    vals = {}
+    for b in BUILDS:
+        h = runs.get(b, {}).get("latency", {}).get("heap")
+        st = static_in_use(s[b]["ram"]) / 1024
+        pk = h["after"]["peak"] / 1024 if h else None
+        vals[b] = [st, pk, st + pk if pk is not None else None]
+    fig, ax = plt.subplots(figsize=(8, 2.9))
+    paired_bars(ax, labels, vals, lambda v: f"{v:,.0f}", " KiB")
+    ax.set_title("RAM in use after the latency run (ESP32-C6, 512 KiB SRAM)")
+    ax.set_xlabel("KiB")
+    legend_top(ax)
+    save(fig, "ram_runtime",
+         "Heap peak since boot, read over HTTP after 1000 requests per endpoint and the page loads. "
+         "C task stacks, lwIP and Wi-Fi buffers live in its heap; Rust task state is static. Not "
+         "counted: the Rust main stack (executor and interrupts), which has no high-water mark.")
+
+
+def boot_time(runs):
+    vals = {b: [median(runs[b]["boot"]["reset_to_http_s"]) if "boot" in runs.get(b, {}) else None]
+            for b in BUILDS}
+    fig, ax = plt.subplots(figsize=(8, 1.9))
+    paired_bars(ax, ["Reset to first HTTP 200"], vals, lambda v: f"{v:.2f}", " s")
+    ax.set_title("Boot to serving, median of 10 resets")
+    ax.set_xlabel("seconds")
+    legend_top(ax)
+    save(fig, "boot", "Reset over USB, then polling /api/v1/system/info every 50 ms; includes "
+                      "Wi-Fi association and DHCP. C's example_connect also waits for an IPv6 "
+                      "link-local address (about 0.8 s after its IPv4 lease) and mounts LittleFS.")
+
+
+def median(xs):
+    xs = sorted(xs)
+    return (xs[(len(xs) - 1) // 2] + xs[len(xs) // 2]) / 2
+
+
 def kib(b):
     return f"{b / 1024:,.0f}"
 
@@ -242,14 +285,64 @@ def report(s, clean, incr, runs):
             "",
         ]
     if runs:
-        lines += ["## On the device", "", "![Latency](figures/latency.svg)", ""]
-        checks = {b: d.get("check", {}) for b, d in runs.items()}
-        names = list(next(iter(checks.values())))
-        lines += ["| Check | " + " | ".join(BUILDS[b][0] for b in checks) + " |",
-                  "|---|" + "---|" * len(checks)]
+        bs = [b for b in BUILDS if b in runs]
+        head = "| | " + " | ".join(BUILDS[b][0] for b in bs) + " |"
+        rule = "|---|" + "---:|" * len(bs)
+        lines += ["## On the device", "", "### Parity checklist", "",
+                  head.replace("| |", "| Check |"), "|---|" + "---|" * len(bs)]
+        names = list(dict.fromkeys(n for b in bs for n in runs[b].get("check", {})))
         for n in names:
-            lines.append(f"| {n} | " + " | ".join(
-                ("pass" if checks[b].get(n, {}).get("pass") else "**fail**") for b in checks) + " |")
+            cells = []
+            for b in bs:
+                c = runs[b].get("check", {}).get(n)
+                cells.append("" if c is None else ("pass" if c["pass"] else "**fail**")
+                             + (f": {c['note']}" if c.get("note") and not c["pass"] else ""))
+            lines.append(f"| {n} | " + " | ".join(cells) + " |")
+        if all("watch" in runs[b] for b in bs):
+            def recover(d):
+                ok = "pass" if d["watch"]["recovered"] and d["watch"]["outages"] else "**fail**"
+                old = d.get("watch_as_shipped")
+                if old and not old["recovered"]:
+                    ok = f"**fail** as shipped ({old['note']}); {ok} with the retry limit raised"
+                return ok
+            lines.append("| Recovers after an access point reboot | "
+                         + " | ".join(recover(runs[b]) for b in bs) + " |")
+        lines += ["", "### Latency", "", "![Latency](figures/latency.svg)", "",
+                  "| ms, p50 / p99 / max | " + " | ".join(BUILDS[b][0] for b in bs) + " |", rule]
+        lat = [n for n in runs[bs[0]].get("latency", {}) if n != "heap"]
+        for n in lat:
+            cells = []
+            for b in bs:
+                r = runs[b].get("latency", {}).get(n)
+                cells.append(f"{r['p50']:.0f} / {r['p99']:.0f} / {r['max']:.0f}"
+                             + (f" ({r['errors']} errors)" if r.get("errors") else "")
+                             if r and r.get("n") else "n/a")
+            lines.append(f"| {n} | " + " | ".join(cells) + " |")
+        lines += ["", "### RAM at run time", "", "![RAM at run time](figures/ram_runtime.svg)", "",
+                  "| KiB | " + " | ".join(BUILDS[b][0] for b in bs) + " |", rule]
+        heaps = {b: runs[b].get("latency", {}).get("heap") for b in bs}
+        for label, f in (("Heap size", lambda h: h["after"]["total"]),
+                         ("Heap in use after the run", lambda h: h["after"]["used"]),
+                         ("Heap high-water mark", lambda h: h["after"]["peak"]),
+                         ("Static in use (no heap arena)", None)):
+            lines.append(f"| {label} | " + " | ".join(
+                kib(static_in_use(s[b]["ram"])) if f is None else (kib(f(heaps[b])) if heaps[b] else "n/a")
+                for b in bs) + " |")
+        if all("boot" in runs[b] for b in bs):
+            lines += ["", "### Boot and recovery", "", "![Boot](figures/boot.svg)", "",
+                      "| | " + " | ".join(BUILDS[b][0] for b in bs) + " |", rule,
+                      "| Reset to first HTTP 200, median of 10 (s) | " + " | ".join(
+                          f"{median(runs[b]['boot']['reset_to_http_s']):.2f}" for b in bs) + " |"]
+        if all("watch" in runs[b] for b in bs):
+            def ap(w):
+                if not w["outages"]:
+                    return "no outage seen"
+                o = w["outages"][0]
+                return (f"recovered, down {o['device_down_s']:.0f} s"
+                        + (f", {o['after_router_s']:.1f} s after the router" if o["after_router_s"] is not None else ""))
+            lines.append("| Access point reboot | " + " | ".join(ap(runs[b]["watch"]) for b in bs) + " |")
+            lines += ["", "Recovery time is measured against the router's own web interface coming "
+                          "back, so it resolves only to the 0.5 s poll."]
         lines.append("")
     else:
         lines += ["## On the device", "", "Not measured yet: needs a board. See the top-level README.", ""]
@@ -269,6 +362,10 @@ def main():
     runs = {b: load(f"http_{b}.json") for b in BUILDS}
     if any(r and "latency" in r for r in runs.values()):
         latency({b: r for b, r in runs.items() if r and "latency" in r})
+        if s:
+            ram_runtime(s, {b: r for b, r in runs.items() if r})
+    if all(r and "boot" in r for r in runs.values()):
+        boot_time(runs)
     if s:
         report(s, clean, incr, {b: r for b, r in runs.items() if r})
 
