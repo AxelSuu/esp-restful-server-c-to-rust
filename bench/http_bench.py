@@ -11,7 +11,6 @@ Results go to results/http_<build>.json (each subcommand updates its own key).
 
 import argparse
 import concurrent.futures as cf
-import http.client
 import json
 import socket
 import statistics
@@ -25,17 +24,41 @@ BAD_JSON = b'{"red": 1, "green": '
 
 
 def request(host, method, path, body=None, timeout=10):
-    """One request on a fresh connection. Returns (status, headers, body, seconds)."""
+    """One request on a fresh connection. Returns (status, headers, body, seconds).
+
+    Seconds run to the last body byte. The socket is closed only after the server's FIN: closing
+    first races the server's close, and smoltcp then holds the socket for a ~1 s retransmit.
+    """
+    h, _, p = host.partition(":")
     t0 = time.perf_counter()
-    conn = http.client.HTTPConnection(host, timeout=timeout)
-    headers = {"Connection": "close"}
-    if body is not None:
-        headers["Content-Type"] = "application/json"
-    conn.request(method, path, body=body, headers=headers)
-    resp = conn.getresponse()
-    data = resp.read()
-    conn.close()
-    return resp.status, dict(resp.getheaders()), data, time.perf_counter() - t0
+    s = socket.create_connection((h, int(p or 80)), timeout=timeout)
+    try:
+        payload = body.encode() if isinstance(body, str) else (body or b"")
+        head = f"{method} {path} HTTP/1.1\r\nHost: {h}\r\nConnection: close\r\n"
+        if body is not None:
+            head += f"Content-Type: application/json\r\nContent-Length: {len(payload)}\r\n"
+        s.sendall(head.encode() + b"\r\n" + payload)
+        buf, need, t_body = b"", None, None
+        while True:
+            chunk = s.recv(65536)
+            if not chunk:
+                break
+            buf += chunk
+            if need is None and b"\r\n\r\n" in buf:
+                hdr, rest = buf.split(b"\r\n\r\n", 1)
+                lines = hdr.decode("latin-1").split("\r\n")
+                headers = dict(l.split(": ", 1) for l in lines[1:] if ": " in l)
+                need = len(hdr) + 4 + int({k.lower(): v for k, v in headers.items()}
+                                          .get("content-length", 1 << 62))
+            if need is not None and t_body is None and len(buf) >= need:
+                t_body = time.perf_counter()
+        if need is None:
+            raise ConnectionError("no response headers")
+        t_body = t_body or time.perf_counter()
+    finally:
+        s.close()
+    status = int(lines[0].split()[1])
+    return status, headers, buf[len(hdr) + 4:], t_body - t0
 
 
 def mdns_resolve(name, timeout=3.0):
