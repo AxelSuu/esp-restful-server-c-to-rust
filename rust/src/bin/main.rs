@@ -97,6 +97,11 @@ async fn connection(mut controller: WifiController<'static>) -> ! {
             )),
     );
     controller.set_config(&config).unwrap();
+    // ESP-IDF's default; esp-radio defaults to no power saving.
+    #[cfg(feature = "ps-min")]
+    controller
+        .set_power_saving(esp_radio::wifi::PowerSaveMode::Minimum)
+        .unwrap();
 
     loop {
         info!("Connecting to {SSID}...");

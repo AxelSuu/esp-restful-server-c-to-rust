@@ -77,3 +77,5 @@ default = ["web"]
 web = []
 # GET /api/v1/heap for bench/http_bench.py, EXAMPLE_HEAP_STATS in the C build.
 heap-stats = ["esp-alloc/internal-heap-stats"]
+# Wi-Fi modem sleep as in ESP-IDF (WIFI_PS_MIN_MODEM), for a like-for-like latency run.
+ps-min = []
