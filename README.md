@@ -29,10 +29,11 @@ results/    measured data (JSON) and figures
 
 ## Build
 
-Both builds read Wi-Fi credentials from the environment.
+Both builds read Wi-Fi credentials from `WIFI_SSID` and `WIFI_PASSWORD`, or from a gitignored
+`wifi.env` at the repo root holding those two assignments. The network must be 2.4 GHz and allow
+WPA2: the Rust build cannot join a WPA3-only network.
 
 ```sh
-export WIFI_SSID=... WIFI_PASSWORD=...
 (cd front/web-demo && pnpm install && pnpm build)   # once, both builds embed dist/
 
 scripts/build_c.sh                    # c/build/
