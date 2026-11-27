@@ -50,11 +50,13 @@ def request(host, method, path, body=None, timeout=10):
                 hdr, rest = buf.split(b"\r\n\r\n", 1)
                 lines = hdr.decode("latin-1").split("\r\n")
                 headers = dict(l.split(": ", 1) for l in lines[1:] if ": " in l)
-                need = len(hdr) + 4 + int({k.lower(): v for k, v in headers.items()}
-                                          .get("content-length", 1 << 62))
-            if need is not None and t_body is None and len(buf) >= need:
+                low = {k.lower(): v.lower() for k, v in headers.items()}
+                chunked = low.get("transfer-encoding") == "chunked"
+                need = len(hdr) + 4 + int(low.get("content-length", 1 << 62))
+            done = need is not None and (buf.endswith(b"0\r\n\r\n") if chunked else len(buf) >= need)
+            if done and t_body is None:
                 t_body = time.perf_counter()
-                if {k.lower(): v.lower() for k, v in headers.items()}.get("connection") != "close":
+                if low.get("connection") != "close":
                     break
         if need is None:
             raise ConnectionError("no response headers")
@@ -62,7 +64,19 @@ def request(host, method, path, body=None, timeout=10):
     finally:
         s.close()
     status = int(lines[0].split()[1])
-    return status, headers, buf[len(hdr) + 4:], t_body - t0
+    body = buf[len(hdr) + 4:]
+    return status, headers, dechunk(body) if chunked else body, t_body - t0
+
+
+def dechunk(b):
+    out = b""
+    while b:
+        size, _, b = b.partition(b"\r\n")
+        n = int(size.split(b";")[0], 16)
+        if n == 0:
+            break
+        out, b = out + b[:n], b[n + 2:]
+    return out
 
 
 def mdns_resolve(name, timeout=3.0):
