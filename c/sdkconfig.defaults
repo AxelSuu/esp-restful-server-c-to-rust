@@ -6,3 +6,5 @@ CONFIG_PARTITION_TABLE_FILENAME="partitions_example.csv"
 # Comparison build: serve the frontend, optimise for size (Rust uses opt-level "s")
 CONFIG_EXAMPLE_DEPLOY_WEB_PAGES=y
 CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+# The example stops reconnecting after 6 failures; the parity checklist needs AP reboot recovery.
+CONFIG_EXAMPLE_WIFI_CONN_MAX_RETRY=2147483647
