@@ -7,12 +7,16 @@ Embassy, picoserve), measured on an ESP32-C6. Full tables: [results/README.md](r
 
 | | C / ESP-IDF | Rust / esp-hal |
 |---|---:|---:|
+| Parity checks passed, as shipped | 6 / 8 | 8 / 8 |
 | App image, frontend excluded | 934 KiB | 662 KiB |
 | SRAM in use at peak | 254 KiB | 242 KiB |
 | Small request, p50 | 19 ms | 13 ms |
 | 245 KB file, p50 | 364 ms | 789 ms |
+| Full page load, 6 connections, p50 | 1.45 s | 2.24 s |
 | Reset to first HTTP 200 | 5.1 s | 1.7 s |
-| Clean build | 70 s | 52 s |
+| Clean build / one-file rebuild | 70 s / 7.0 s | 52 s / 8.0 s |
+| App source lines | 269 | 323 |
+| Dependencies | 79 IDF components | 173 crates |
 
 ![Flash by origin](results/figures/flash_by_origin.svg)
 ![RAM at run time](results/figures/ram_runtime.svg)
