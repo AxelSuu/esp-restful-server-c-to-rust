@@ -4,6 +4,7 @@
   bench/http_bench.py check   --host 192.168.1.50 --build c
   bench/http_bench.py latency --host 192.168.1.50 --build c -n 1000
   bench/http_bench.py watch   --host 192.168.1.50 --build c     # reboot the AP while this runs
+  bench/http_bench.py boot    --host 192.168.1.50 --build c     # needs pyserial and the USB port
 
 Results go to results/http_<build>.json (each subcommand updates its own key).
 """
@@ -139,12 +140,12 @@ def check(host):
     def alive():
         time.sleep(3)
         st, _, _, _ = request(host, "GET", "/api/v1/system/info")
-        return st == 200, "still serving after bad JSON"
+        return st == 200, "serving again (a crash and reboot also passes: check the serial log)"
 
     for name, fn in [("GET / serves the frontend", index), ("GET system/info", info),
                      ("GET temp/raw", temp), ("POST light/brightness", light),
                      ("dashboard.local resolves", mdns), ("POST bad JSON answers 400", bad_json),
-                     ("Survives bad JSON", alive)]:
+                     ("Serving again after bad JSON", alive)]:
         row(name, fn)
     return rows
 
@@ -155,6 +156,8 @@ def pct(xs, p):
 
 
 def summary(secs):
+    if not secs:
+        return {"n": 0, "samples_ms": []}
     ms = [s * 1000 for s in secs]
     return {"n": len(ms), "p50": pct(ms, 50), "p90": pct(ms, 90), "p99": pct(ms, 99),
             "max": max(ms), "mean": statistics.fmean(ms), "samples_ms": ms}
@@ -186,8 +189,9 @@ def latency(host, n):
             except OSError:
                 errors += 1
         out[name] = {**summary(secs), "errors": errors}
-        print(f"{name:40s} p50 {out[name]['p50']:7.1f} ms  p99 {out[name]['p99']:7.1f} ms  "
-              f"max {out[name]['max']:7.1f} ms  errors {errors}")
+        r = out[name]
+        print(f"{name:40s} " + (f"p50 {r['p50']:7.1f} ms  p99 {r['p99']:7.1f} ms  max {r['max']:7.1f} ms"
+                                if r["n"] else "no successful requests") + f"  errors {errors}")
 
     files = ["/" + str(f.relative_to(DIST)) for f in DIST.rglob("*") if f.is_file()]
     loads, failed = [], 0
@@ -200,7 +204,8 @@ def latency(host, n):
         else:
             failed += 1
     out["Full page load (6 parallel)"] = {**summary(loads), "errors": failed}
-    print(f"Full page load: p50 {out['Full page load (6 parallel)']['p50']:.0f} ms, failed {failed}")
+    r = out["Full page load (6 parallel)"]
+    print(f"Full page load: p50 {r.get('p50', float('nan')):.0f} ms, failed {failed}")
     if heap_before:
         out["heap"] = {"before": heap_before, "after": heap(host)}
         print("heap", out["heap"])
@@ -247,9 +252,33 @@ def watch(host, interval=0.5):
     return {"outages_s": outages, "recovered": down_since is None}
 
 
+def boot(host, port, runs):
+    """Reset over USB-Serial-JTAG, then time until the first HTTP 200, `runs` times."""
+    import serial  # only this subcommand needs pyserial
+
+    times = []
+    for i in range(runs):
+        with serial.Serial(port, 115200) as s:
+            s.dtr, s.rts = False, True
+            time.sleep(0.05)
+            t0 = time.perf_counter()
+            s.rts = False
+        time.sleep(0.5)  # let the old server go away
+        while time.perf_counter() - t0 < 30:
+            try:
+                if request(host, "GET", "/api/v1/system/info", timeout=0.5)[0] == 200:
+                    times.append(time.perf_counter() - t0)
+                    break
+            except OSError:
+                time.sleep(0.05)
+        print(f"run {i + 1}: {times[-1]:.2f} s" if len(times) == i + 1 else f"run {i + 1}: timeout")
+    return {"reset_to_http_s": times}
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["check", "latency", "watch"])
+    ap.add_argument("cmd", choices=["check", "latency", "watch", "boot"])
+    ap.add_argument("--port", default="/dev/ttyACM0")
     ap.add_argument("--host", required=True)
     ap.add_argument("--build", required=True, help="c or rust")
     ap.add_argument("-n", type=int, default=1000)
@@ -258,7 +287,8 @@ def main():
     path = ROOT / f"results/http_{a.build}.json"
     data = json.loads(path.read_text()) if path.exists() else {}
     data[a.cmd] = {"check": lambda: check(a.host), "latency": lambda: latency(a.host, a.n),
-                   "watch": lambda: watch(a.host)}[a.cmd]()
+                   "watch": lambda: watch(a.host),
+                   "boot": lambda: boot(a.host, a.port, 10)}[a.cmd]()
     data.setdefault("meta", {})[a.cmd] = time.strftime("%Y-%m-%d %H:%M")
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps(data, indent=1))
