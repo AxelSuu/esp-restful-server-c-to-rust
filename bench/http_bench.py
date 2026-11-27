@@ -251,28 +251,43 @@ def _try(host, path):
         return False
 
 
-def watch(host, interval=0.5):
-    """Poll until interrupted; report each outage and the time to recover."""
-    outages, down_since = [], None
-    print("Polling; reboot the access point now. Ctrl-C to stop.")
+def up(host, port, timeout):
     try:
-        while True:
-            try:
-                ok = request(host, "GET", "/api/v1/system/info", timeout=2)[0] == 200
-            except OSError:
-                ok = False
-            now = time.monotonic()
-            if not ok and down_since is None:
-                down_since = now
-                print("down")
-            elif ok and down_since is not None:
-                outages.append(now - down_since)
-                print(f"back after {outages[-1]:.1f} s")
-                down_since = None
-            time.sleep(interval)
-    except KeyboardInterrupt:
-        pass
-    return {"outages_s": outages, "recovered": down_since is None}
+        socket.create_connection((host, port), timeout=timeout).close()
+        return True
+    except OSError:
+        return False
+
+
+def watch(host, gateway, seconds, interval=0.5):
+    """Poll device and router for `seconds`; per outage, how long the device lagged the router."""
+    outages, dev_down, gw_down, gw_back = [], None, None, None
+    print(f"Polling for {seconds:.0f} s; reboot the access point now.")
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        try:
+            ok = request(host, "GET", "/api/v1/system/info", timeout=2)[0] == 200
+        except OSError:
+            ok = False
+        gw = up(gateway, 80, 1)
+        now = time.monotonic()
+        if not gw and gw_down is None:
+            gw_down, gw_back = now, None
+        elif gw and gw_down is not None and gw_back is None:
+            gw_back = now
+            print(f"router back after {gw_back - gw_down:.1f} s")
+        if not ok and dev_down is None:
+            dev_down = now
+            print("device down")
+        elif ok and dev_down is not None:
+            o = {"device_down_s": now - dev_down,
+                 "after_router_s": now - gw_back if gw_back else None}
+            outages.append(o)
+            print(f"device back after {o['device_down_s']:.1f} s"
+                  + (f", {o['after_router_s']:.1f} s after the router" if gw_back else ""))
+            dev_down, gw_down, gw_back = None, None, None
+        time.sleep(interval)
+    return {"outages": outages, "recovered": dev_down is None}
 
 
 def boot(host, port, runs):
@@ -302,6 +317,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["check", "latency", "watch", "boot"])
     ap.add_argument("--port", default="/dev/ttyACM0")
+    ap.add_argument("--gateway", default="192.168.0.1", help="router, probed on TCP 80")
+    ap.add_argument("--seconds", type=float, default=300, help="watch duration")
     ap.add_argument("--host", required=True)
     ap.add_argument("--build", required=True, help="c or rust")
     ap.add_argument("-n", type=int, default=1000)
@@ -310,7 +327,7 @@ def main():
     path = ROOT / f"results/http_{a.build}.json"
     data = json.loads(path.read_text()) if path.exists() else {}
     data[a.cmd] = {"check": lambda: check(a.host), "latency": lambda: latency(a.host, a.n),
-                   "watch": lambda: watch(a.host),
+                   "watch": lambda: watch(a.host, a.gateway, a.seconds),
                    "boot": lambda: boot(a.host, a.port, 10)}[a.cmd]()
     data.setdefault("meta", {})[a.cmd] = time.strftime("%Y-%m-%d %H:%M")
     path.parent.mkdir(exist_ok=True)
