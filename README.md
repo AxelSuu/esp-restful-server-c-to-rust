@@ -3,11 +3,12 @@
 Espressifs 
 [restful_server](https://github.com/espressif/esp-idf/tree/master/examples/protocols/http_server/restful_server) 
 ported from C (ESP-IDF 6.0) to Rust (esp-hal 1.2.3,
-Embassy, picoserve), measured on an ESP32-C6. Full tables: [results/README.md](results/README.md).
+Embassy), measured on an ESP32-C6. 
+Full tables: [results/README.md](results/README.md).
 
-| ESP32-C6, same frontend and API | C: ESP-IDF 6.0, FreeRTOS, lwIP | Rust: esp-hal 1.2, Embassy, smoltcp |
+| | C: ESP-IDF 6.0, FreeRTOS, lwIP | Rust: esp-hal 1.2, Embassy, smoltcp |
 |---|---:|---:|
-| App image, frontend excluded | 934 KiB | 662 KiB |
+| Binary size | 934 KiB | 662 KiB |
 | SRAM in use at peak | 254 KiB | 242 KiB |
 | Small request, p50 | 19 ms | 13 ms |
 | 245 KB file, p50 | 364 ms | 789 ms |
