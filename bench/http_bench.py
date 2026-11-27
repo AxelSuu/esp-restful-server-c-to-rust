@@ -26,8 +26,10 @@ BAD_JSON = b'{"red": 1, "green": '
 def request(host, method, path, body=None, timeout=10):
     """One request on a fresh connection. Returns (status, headers, body, seconds).
 
-    Seconds run to the last body byte. The socket is closed only after the server's FIN: closing
-    first races the server's close, and smoltcp then holds the socket for a ~1 s retransmit.
+    Seconds run to the last body byte. If the response says `Connection: close` the server is
+    closing, so wait for its FIN: closing first races it, and smoltcp then holds the socket for a
+    ~1 s retransmit. esp_http_server ignores the request header and keeps the socket open, so
+    there the client closes as soon as the body is in.
     """
     h, _, p = host.partition(":")
     t0 = time.perf_counter()
@@ -52,6 +54,8 @@ def request(host, method, path, body=None, timeout=10):
                                           .get("content-length", 1 << 62))
             if need is not None and t_body is None and len(buf) >= need:
                 t_body = time.perf_counter()
+                if {k.lower(): v.lower() for k, v in headers.items()}.get("connection") != "close":
+                    break
         if need is None:
             raise ConnectionError("no response headers")
         t_body = t_body or time.perf_counter()
