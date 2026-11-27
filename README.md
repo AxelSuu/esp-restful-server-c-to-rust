@@ -84,6 +84,31 @@ random port never arrived in testing (probably the Hyper-V firewall). No firewal
 | Concurrent HTTP connections | 7 sockets, one server task, lwIP accept backlog | 8 sockets, one task each, no backlog: more connections are refused |
 | Client closes before the server's FIN | no visible effect | the socket stays busy ~1 s (a retransmit), so bursts of such clients get refused; the bench waits for the server's FIN |
 
+## Found on the board
+
+- **C crashes on bad JSON.** The fault is at `rest_server.c:126`, after which the board reboots
+  and is serving again in about 5.6 s.
+- **The C example stops reconnecting.** `example_connect` gives up after 7 failed attempts,
+  about 15 s, so the board stayed offline after a 76 s router reboot. `c/sdkconfig.defaults`
+  now raises `CONFIG_EXAMPLE_WIFI_CONN_MAX_RETRY`; with that change it recovered.
+- **Rust panicked on boot until fixed.** `edge-nal-embassy`'s default features enable
+  embassy-net DNS, which adds a socket the socket pool was not sized for.
+- **Rust has no listen backlog.** Each picoserve task owns one smoltcp socket, so a connection
+  beyond the task count is refused. A browser opens 6 at once, so 4 tasks failed every page
+  load; the build now runs 8.
+- **Rust stalls when the client closes first.** If the client closes before the server's FIN
+  arrives, the Rust socket stays busy about 1 s, likely a retransmit. A burst of such clients
+  then gets refused. The bench waits for the FIN whenever the server says `Connection: close`.
+  esp_http_server ignores `Connection: close` and never sends one.
+- **Rust is slower on large files.** It takes 789 ms for the 245 KB stylesheet, against 365 ms
+  for C. An 8 KiB TCP send buffer instead of 4 KiB brings that to 578 ms but does not speed up
+  the full page load, so the buffer is only part of the cause.
+- **Rust runs the radio without power saving.** ESP-IDF defaults to modem sleep, which
+  `--features ps-min` turns on. In one run with it, small-request p50 rose from 13.4 to
+  14.8 ms, but 5 of 20 stylesheet downloads and all 20 page loads failed
+  (`results/http_rust_psmin.json`). The comparison therefore uses esp-radio's default,
+  power saving off.
+
 ## Results
 
 See [results/README.md](results/README.md).
