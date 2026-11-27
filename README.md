@@ -1,114 +1,54 @@
-# restful_server: C on ESP-IDF vs Rust on esp-hal
+# restful_server: C/ESP-IDF vs Rust/esp-hal
 
-Espressif's `restful_server` example, ported from C on ESP-IDF 6.0 to bare-metal Rust on esp-hal,
-then measured side by side on an ESP32-C6. Same Vue frontend, same REST API, same mDNS name.
+Espressif's `restful_server` example ported from C (ESP-IDF 6.0) to no_std Rust (esp-hal 1.2.3,
+Embassy, picoserve), measured on an ESP32-C6. Same frontend, API and mDNS name.
+Full tables: [results/README.md](results/README.md).
 
-| | C build (`c/`) | Rust build (`rust/`) |
-|---|---|---|
-| SDK | ESP-IDF 6.0, GCC 15.2 | esp-hal 1.2.3, esp-radio 1.0.0-beta.1, esp-rtos 0.4, rustc 1.99 stable |
-| Concurrency | FreeRTOS, `esp_http_server` task | Embassy async tasks |
-| Network | lwIP | embassy-net on smoltcp |
-| HTTP, JSON | `esp_http_server`, cJSON | picoserve, serde-json-core |
-| mDNS | `espressif/mdns` (+ NetBIOS) | edge-mdns |
-| Frontend | LittleFS partition | embedded in the app with `include_bytes!` |
-| Optimisation | `-Os` | `opt-level = "s"`, fat LTO |
+| | C / ESP-IDF | Rust / esp-hal |
+|---|---:|---:|
+| App image, frontend excluded | 934 KiB | 662 KiB |
+| SRAM in use at peak | 254 KiB | 242 KiB |
+| Small request, p50 | 19 ms | 13 ms |
+| 245 KB file, p50 | 364 ms | 789 ms |
+| Reset to first HTTP 200 | 5.1 s | 1.7 s |
+| Clean build | 70 s | 52 s |
+| Checklist | 6/8: crashes on bad JSON; no AP recovery as shipped | 8/8 |
 
-esp-hal 1.3 is not released yet (27 Nov 2026). `rust/Cargo.toml` pins `~1.2.2`; bump to `~1.3`
-when it ships and re-run the measurements.
+![Flash by origin](results/figures/flash_by_origin.svg)
+![RAM at run time](results/figures/ram_runtime.svg)
+![Latency](results/figures/latency.svg)
+![Boot](results/figures/boot.svg)
 
-## Layout
+## Notes
 
-```
-c/          ESP-IDF project (the original example, moved here)
-rust/       esp-hal port: src/bin/main.rs (Wi-Fi, tasks), src/web.rs (HTTP), src/mdns.rs
-front/      Vue frontend shared by both builds
-scripts/    reproducible builds for both
-bench/      measurement and chart scripts
-results/    measured data (JSON) and figures
-```
+- **C, bad JSON:** NULL dereference at `rest_server.c:126`, reboot, back in 5.6 s.
+- **C, AP reboot:** `example_connect` quits after 7 attempts (~15 s). Fixed here with
+  `CONFIG_EXAMPLE_WIFI_CONN_MAX_RETRY`.
+- **Rust, no listen backlog:** one smoltcp socket per task, extra connections are refused. 8 tasks
+  cover a browser's 6.
+- **Rust, client closes first:** socket busy ~1 s (retransmit). The bench waits for the server's
+  FIN when told `Connection: close`.
+- **Rust, large files:** 4 KiB TCP send buffer; 8 KiB gives 578 ms, the rest is unexplained.
+- **Rust, Wi-Fi power save:** off (esp-radio default). `--features ps-min` matches IDF but broke
+  page loads in one run.
+- **Rust, Wi-Fi security:** WPA2 at most (esp-radio beta.1).
+- **API differences:** Rust answers 404 not 500 for unknown files, rejects colours above 255,
+  emits compact JSON and reports `esp-hal v1.2.3` as `idf_version`. No NetBIOS.
 
-## Build
+## Run
 
-Both builds read Wi-Fi credentials from `WIFI_SSID` and `WIFI_PASSWORD`, or from a gitignored
-`wifi.env` at the repo root holding those two assignments. The network must be 2.4 GHz and allow
-WPA2: the Rust build cannot join a WPA3-only network.
-
-```sh
-(cd front/web-demo && pnpm install && pnpm build)   # once, both builds embed dist/
-
-scripts/build_c.sh                    # c/build/
-scripts/build_c.sh flash monitor      # any idf.py arguments
-scripts/build_rust.sh                 # rust/target/riscv32imac-unknown-none-elf/release/
-(cd rust && cargo run --release)      # flash and monitor with espflash
-```
-
-Toolchain: ESP-IDF 6.0 via EIM; Rust stable with `rustup target add riscv32imac-unknown-none-elf`
-and `cargo install espflash`.
-
-## Measure
+Wi-Fi from `WIFI_SSID`/`WIFI_PASSWORD` or a gitignored `wifi.env`; 2.4 GHz, WPA2.
 
 ```sh
-python3 bench/measure_static.py       # size by origin, static RAM, source, packages
-bench/build_times.sh                  # hyperfine, clean and one-file change
-bench/http_bench.py check   --host <ip> --build c       # parity checklist
-bench/http_bench.py latency --host <ip> --build c -n 1000
-bench/http_bench.py watch   --host <ip> --build c       # reboot the AP during this (300 s)
-bench/http_bench.py boot    --host <ip> --build c       # 10 USB resets; needs pyserial
-bench/serial_log.py --out results/x.log                 # serial log, Wi-Fi name redacted
-uv run bench/charts.py                # results/figures/*.svg
+(cd front/web-demo && pnpm install && pnpm build)    # both builds embed dist/
+scripts/build_c.sh [flash monitor]                   # HEAP_STATS=1 adds /api/v1/heap
+scripts/build_rust.sh [--features heap-stats]        # flash: espflash flash <elf>
+scripts/build_rust.sh --no-default-features --target-dir target/noweb   # for measure_static
+
+python3 bench/measure_static.py                      # size, static RAM, source
+bench/build_times.sh                                 # hyperfine
+bench/http_bench.py check|latency|watch|boot --host <ip> --build c|rust
+uv run bench/charts.py                               # figures + results/README.md
 ```
 
-`measure_static.py` needs the Rust build without the frontend as well:
-`scripts/build_rust.sh --no-default-features --target-dir target/noweb`.
-
-For heap numbers, flash builds with the opt-in `/api/v1/heap` endpoint:
-`HEAP_STATS=1 scripts/build_c.sh flash` and `scripts/build_rust.sh --features heap-stats`.
-`http_bench.py latency` then records heap use before and after the load.
-
-Run `http_bench.py` from a machine on the same Wi-Fi. Under WSL2 the mDNS check needs
-`networkingMode=mirrored` in `%UserProfile%\.wslconfig`: NAT mode never delivers multicast.
-The check queries from port 5353 so that answers come back by multicast; unicast answers to a
-random port never arrived in testing (probably the Hyper-V firewall). No firewall change is needed.
-
-## Behavioural differences
-
-| | C | Rust |
-|---|---|---|
-| POST with invalid JSON | `cJSON_Parse` returns NULL and the handler dereferences it (`rest_server.c:126`): Load access fault, reboot, serving again after ~5.6 s | 400 Bad Request |
-| Colour value above 255 | accepted (`valueint`) | 400, fields are `u8` |
-| Unknown file | 500 | 404 |
-| JSON formatting | pretty-printed (`cJSON_Print`) | compact |
-| `idf_version` field | IDF version | `esp-hal v1.2.3` (key kept for the frontend) |
-| NetBIOS name | yes | no |
-| Wi-Fi security | up to WPA3 | up to WPA2: esp-radio beta.1 has no WPA3 station mode |
-| Concurrent HTTP connections | 7 sockets, one server task, lwIP accept backlog | 8 sockets, one task each, no backlog: more connections are refused |
-| Client closes before the server's FIN | no visible effect | the socket stays busy ~1 s (a retransmit), so bursts of such clients get refused; the bench waits for the server's FIN |
-
-## Found on the board
-
-- **C crashes on bad JSON.** The fault is at `rest_server.c:126`, after which the board reboots
-  and is serving again in about 5.6 s.
-- **The C example stops reconnecting.** `example_connect` gives up after 7 failed attempts,
-  about 15 s, so the board stayed offline after a 76 s router reboot. `c/sdkconfig.defaults`
-  now raises `CONFIG_EXAMPLE_WIFI_CONN_MAX_RETRY`; with that change it recovered.
-- **Rust panicked on boot until fixed.** `edge-nal-embassy`'s default features enable
-  embassy-net DNS, which adds a socket the socket pool was not sized for.
-- **Rust has no listen backlog.** Each picoserve task owns one smoltcp socket, so a connection
-  beyond the task count is refused. A browser opens 6 at once, so 4 tasks failed every page
-  load; the build now runs 8.
-- **Rust stalls when the client closes first.** If the client closes before the server's FIN
-  arrives, the Rust socket stays busy about 1 s, likely a retransmit. A burst of such clients
-  then gets refused. The bench waits for the FIN whenever the server says `Connection: close`.
-  esp_http_server ignores `Connection: close` and never sends one.
-- **Rust is slower on large files.** It takes 789 ms for the 245 KB stylesheet, against 365 ms
-  for C. An 8 KiB TCP send buffer instead of 4 KiB brings that to 578 ms but does not speed up
-  the full page load, so the buffer is only part of the cause.
-- **Rust runs the radio without power saving.** ESP-IDF defaults to modem sleep, which
-  `--features ps-min` turns on. In one run with it, small-request p50 rose from 13.4 to
-  14.8 ms, but 5 of 20 stylesheet downloads and all 20 page loads failed
-  (`results/http_rust_psmin.json`). The comparison therefore uses esp-radio's default,
-  power saving off.
-
-## Results
-
-See [results/README.md](results/README.md).
+WSL2 needs `networkingMode=mirrored` for the mDNS check. esp-hal is pinned `~1.2.2`; re-run on 1.3.
