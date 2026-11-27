@@ -62,8 +62,10 @@ For heap numbers, flash builds with the opt-in `/api/v1/heap` endpoint:
 `HEAP_STATS=1 scripts/build_c.sh flash` and `scripts/build_rust.sh --features heap-stats`.
 `http_bench.py latency` then records heap use before and after the load.
 
-Run `http_bench.py` from a machine on the same Wi-Fi. Under WSL2 the mDNS check fails because
-NAT drops multicast; run it from the host OS instead.
+Run `http_bench.py` from a machine on the same Wi-Fi. Under WSL2 the mDNS check needs
+`networkingMode=mirrored` in `%UserProfile%\.wslconfig`: NAT mode never delivers multicast.
+The check queries from port 5353 so that answers come back by multicast; unicast answers to a
+random port never arrived in testing (probably the Hyper-V firewall). No firewall change is needed.
 
 ## Behavioural differences
 

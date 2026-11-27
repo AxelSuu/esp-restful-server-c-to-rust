@@ -38,17 +38,30 @@ def request(host, method, path, body=None, timeout=10):
 
 
 def mdns_resolve(name, timeout=3.0):
-    """Send one mDNS A query for `name` and return the first answer's address, or None."""
+    """Multicast A query for `name` from port 5353, as an OS resolver sends it; first answer or None.
+
+    Replies to a query from a random port come back unicast, and those never arrived under
+    WSL2 mirrored networking (probably the Hyper-V firewall). Multicast replies get through.
+    """
     qname = b"".join(bytes([len(p)]) + p.encode() for p in name.split(".")) + b"\0"
-    query = struct.pack(">HHHHHH", 0, 0, 1, 0, 0, 0) + qname + struct.pack(">HH", 1, 0x8001)
+    query = struct.pack(">HHHHHH", 0, 0, 1, 0, 0, 0) + qname + struct.pack(">HH", 1, 1)
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    s.settimeout(timeout)
-    s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 255)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    if hasattr(socket, "SO_REUSEPORT"):
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    s.settimeout(0.5)
     try:
+        s.bind(("", 5353))
+        s.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
+                     socket.inet_aton("224.0.0.251") + socket.inet_aton("0.0.0.0"))
+        s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 255)
         s.sendto(query, ("224.0.0.251", 5353))
         end = time.monotonic() + timeout
         while time.monotonic() < end:
-            data, _ = s.recvfrom(1500)
+            try:
+                data, _ = s.recvfrom(9000)
+            except socket.timeout:
+                continue
             for rname, rtype, rdata in dns_records(data):
                 if rtype == 1 and rname.lower() == name.lower() and len(rdata) == 4:
                     return socket.inet_ntoa(rdata)
@@ -117,7 +130,7 @@ def check(host):
 
     def mdns():
         ip = mdns_resolve("dashboard.local")
-        return ip is not None, ip or "no answer (multicast may not reach this host, e.g. WSL2 NAT)"
+        return ip is not None, ip or "no answer (under WSL2 this needs networkingMode=mirrored)"
 
     def bad_json():
         st, _, body, _ = request(host, "POST", "/api/v1/light/brightness", BAD_JSON)
